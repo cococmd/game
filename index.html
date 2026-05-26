@@ -23,10 +23,11 @@
       <span>最高 <strong id="best">0</strong></span>
     </div>
     <p class="hint hint-desktop">方向键 / WASD 移动 · 空格暂停</p>
-    <p class="hint hint-mobile">滑动屏幕或点击下方方向键 · 点暂停</p>
+    <p class="hint hint-mobile" id="mobileHint">👆 在游戏区滑动 或 点下方方向键</p>
   </div>
 
   <div class="game-wrap glass-frame" id="gameWrap">
+    <p class="swipe-hint" id="swipeHint">👆 滑动控制方向</p>
     <canvas id="game"></canvas>
     <div class="overlay" id="overlay">
       <div class="overlay-card glass-panel">
@@ -34,19 +35,30 @@
         <h2 id="overlayTitle">Coco's Hungry Snake</h2>
         <p class="overlay-tagline">A very hungry crystal serpent awaits…</p>
         <p id="overlayMsg">Feed me 🍎 🍌 🍐 — the fruits change every bite!</p>
+        <div class="mobile-howto" id="mobileHowto">
+          <p class="howto-title">📱 手机怎么玩</p>
+          <ul>
+            <li><strong>滑动</strong>：在游戏画面上滑 / 下滑 / 左滑 / 右滑</li>
+            <li><strong>按钮</strong>：点屏幕下方的 ▲ ◀ ▼ ▶</li>
+            <li><strong>暂停</strong>：点左侧 ⏸ 按钮</li>
+          </ul>
+        </div>
         <button class="btn-crystal" id="startBtn">Let's Eat</button>
       </div>
     </div>
   </div>
 
-  <div class="mobile-controls" id="mobileControls">
-    <button type="button" class="ctrl-btn ctrl-pause" id="pauseBtn" aria-label="暂停">⏸</button>
-    <div class="dpad">
-      <button type="button" class="ctrl-btn" data-dir="up" aria-label="上">▲</button>
-      <div class="dpad-row">
-        <button type="button" class="ctrl-btn" data-dir="left" aria-label="左">◀</button>
-        <button type="button" class="ctrl-btn" data-dir="down" aria-label="下">▼</button>
-        <button type="button" class="ctrl-btn" data-dir="right" aria-label="右">▶</button>
+  <div class="mobile-controls" id="mobileControls" aria-label="触屏方向键">
+    <p class="controls-label">触控区 · 点方向或滑动游戏画面</p>
+    <div class="controls-row">
+      <button type="button" class="ctrl-btn ctrl-pause" id="pauseBtn" aria-label="暂停">⏸<span>暂停</span></button>
+      <div class="dpad">
+        <button type="button" class="ctrl-btn" data-dir="up" aria-label="向上">▲<span>上</span></button>
+        <div class="dpad-row">
+          <button type="button" class="ctrl-btn" data-dir="left" aria-label="向左">◀<span>左</span></button>
+          <button type="button" class="ctrl-btn" data-dir="down" aria-label="向下">▼<span>下</span></button>
+          <button type="button" class="ctrl-btn" data-dir="right" aria-label="向右">▶<span>右</span></button>
+        </div>
       </div>
     </div>
   </div>

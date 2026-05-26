@@ -9,6 +9,8 @@ const overlayMsg = document.getElementById("overlayMsg");
 const startBtn = document.getElementById("startBtn");
 const pauseBtn = document.getElementById("pauseBtn");
 const mobileControls = document.getElementById("mobileControls");
+const mobileHowto = document.getElementById("mobileHowto");
+const swipeHint = document.getElementById("swipeHint");
 
 const CELLS = 16;
 const TICK_MS = 115;
@@ -43,11 +45,25 @@ const DIR = {
 };
 
 function isTouchDevice() {
-  return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  return (
+    "ontouchstart" in window ||
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(hover: none) and (pointer: coarse)").matches
+  );
+}
+
+function initTouchMode() {
+  if (isTouchDevice()) {
+    document.body.classList.add("touch-mode");
+  }
+}
+
+function hideSwipeHint() {
+  if (swipeHint) swipeHint.classList.add("hidden");
 }
 
 function fitCanvas() {
-  const controlsH = isTouchDevice() ? 120 : 0;
+  const controlsH = document.body.classList.contains("touch-mode") ? 160 : 0;
   const uiH = 100;
   const legendH = 48;
   const padding = 32;
@@ -108,7 +124,7 @@ function resetGame() {
   gameOver = false;
   swallowAnim = null;
   pauseBtn.classList.remove("paused");
-  pauseBtn.textContent = "⏸";
+  pauseBtn.innerHTML = "⏸<span>暂停</span>";
   spawnFood();
 }
 
@@ -132,6 +148,9 @@ function showOverlay(title, msg, btnText, isStart = false) {
   const taglineEl = document.querySelector(".overlay-tagline");
   if (nameEl) nameEl.style.display = isStart ? "block" : "none";
   if (taglineEl) taglineEl.style.display = isStart ? "block" : "none";
+  if (mobileHowto) {
+    mobileHowto.style.display = isStart && document.body.classList.contains("touch-mode") ? "block" : "none";
+  }
   overlayTitle.textContent = title;
   overlayMsg.textContent = msg;
   startBtn.textContent = btnText;
@@ -146,8 +165,10 @@ function startGame() {
   fitCanvas();
   resetGame();
   hideOverlay();
+  if (swipeHint) swipeHint.classList.remove("hidden");
   if (loopId) clearInterval(loopId);
   loopId = setInterval(tick, TICK_MS);
+  setTimeout(hideSwipeHint, 4000);
 }
 
 function endGame() {
@@ -195,13 +216,16 @@ function applyDirection(d) {
   if (!d) return;
   if (d.x === -direction.x && d.y === -direction.y) return;
   nextDirection = d;
+  hideSwipeHint();
 }
 
 function togglePause() {
   if (!loopId || gameOver) return;
   paused = !paused;
   pauseBtn.classList.toggle("paused", paused);
-  pauseBtn.textContent = paused ? "▶" : "⏸";
+  const icon = paused ? "▶" : "⏸";
+  const label = paused ? "继续" : "暂停";
+  pauseBtn.innerHTML = `${icon}<span>${label}</span>`;
 }
 
 function segmentCenter(x, y) {
@@ -590,6 +614,8 @@ function onTouchEnd(e) {
   }
 }
 
+canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+canvas.addEventListener("touchend", onTouchEnd, { passive: true });
 gameWrap.addEventListener("touchstart", onTouchStart, { passive: true });
 gameWrap.addEventListener("touchend", onTouchEnd, { passive: true });
 
@@ -624,12 +650,13 @@ window.addEventListener("resize", () => {
 });
 
 startBtn.addEventListener("click", startGame);
+initTouchMode();
 loadBest();
 fitCanvas();
 showOverlay(
   "Coco's Hungry Snake",
-  isTouchDevice()
-    ? "Swipe or use the pad below · fruits change every bite 🍎🍌🍐"
+  document.body.classList.contains("touch-mode")
+    ? "开始后在游戏区滑动，或点下方大按钮 🍎🍌🍐"
     : "Feed me 🍎 🍌 🍐 — the fruits change every bite!",
   "Let's Eat",
   true
