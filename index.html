@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>水晶贪吃蛇</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="sparkles" aria-hidden="true"></div>
+
+  <div class="ui glass-panel">
+    <h1>水晶贪吃蛇</h1>
+    <div class="stats">
+      <span>得分 <strong id="score">0</strong></span>
+      <span>最高 <strong id="best">0</strong></span>
+    </div>
+    <p class="hint">方向键 / WASD 移动 · 空格暂停</p>
+  </div>
+
+  <div class="game-wrap glass-frame">
+    <canvas id="game" width="600" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="overlay-card glass-panel">
+        <h2 id="overlayTitle">准备开始</h2>
+        <p id="overlayMsg">吃掉随机出现的水果，让水晶蛇不断生长</p>
+        <button class="btn-crystal" id="startBtn">开始游戏</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="fruit-legend glass-panel">
+    <span>🍎 苹果</span>
+    <span>🍌 香蕉</span>
+    <span>🍐 梨子</span>
+    <span class="legend-note">食物随机出现</span>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
