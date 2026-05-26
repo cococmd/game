@@ -2,8 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>水晶贪吃蛇</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Coco's Hungry Snake</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700&display=swap" rel="stylesheet" />
@@ -14,21 +17,36 @@
   <div class="sparkles" aria-hidden="true"></div>
 
   <div class="ui glass-panel">
-    <h1>水晶贪吃蛇</h1>
+    <h1><span class="name-coco">Coco</span>'s Hungry Snake</h1>
     <div class="stats">
       <span>得分 <strong id="score">0</strong></span>
       <span>最高 <strong id="best">0</strong></span>
     </div>
-    <p class="hint">方向键 / WASD 移动 · 空格暂停</p>
+    <p class="hint hint-desktop">方向键 / WASD 移动 · 空格暂停</p>
+    <p class="hint hint-mobile">滑动屏幕或点击下方方向键 · 点暂停</p>
   </div>
 
-  <div class="game-wrap glass-frame">
-    <canvas id="game" width="600" height="600"></canvas>
+  <div class="game-wrap glass-frame" id="gameWrap">
+    <canvas id="game"></canvas>
     <div class="overlay" id="overlay">
       <div class="overlay-card glass-panel">
-        <h2 id="overlayTitle">准备开始</h2>
-        <p id="overlayMsg">吃掉随机出现的水果，让水晶蛇不断生长</p>
-        <button class="btn-crystal" id="startBtn">开始游戏</button>
+        <p class="overlay-name">Coco</p>
+        <h2 id="overlayTitle">Coco's Hungry Snake</h2>
+        <p class="overlay-tagline">A very hungry crystal serpent awaits…</p>
+        <p id="overlayMsg">Feed me 🍎 🍌 🍐 — the fruits change every bite!</p>
+        <button class="btn-crystal" id="startBtn">Let's Eat</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mobile-controls" id="mobileControls">
+    <button type="button" class="ctrl-btn ctrl-pause" id="pauseBtn" aria-label="暂停">⏸</button>
+    <div class="dpad">
+      <button type="button" class="ctrl-btn" data-dir="up" aria-label="上">▲</button>
+      <div class="dpad-row">
+        <button type="button" class="ctrl-btn" data-dir="left" aria-label="左">◀</button>
+        <button type="button" class="ctrl-btn" data-dir="down" aria-label="下">▼</button>
+        <button type="button" class="ctrl-btn" data-dir="right" aria-label="右">▶</button>
       </div>
     </div>
   </div>

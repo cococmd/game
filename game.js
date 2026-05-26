@@ -1,21 +1,30 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const gameWrap = document.getElementById("gameWrap");
 const scoreEl = document.getElementById("score");
 const bestEl = document.getElementById("best");
 const overlay = document.getElementById("overlay");
 const overlayTitle = document.getElementById("overlayTitle");
 const overlayMsg = document.getElementById("overlayMsg");
 const startBtn = document.getElementById("startBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+const mobileControls = document.getElementById("mobileControls");
 
-const GRID = 20;
-const COLS = canvas.width / GRID;
-const ROWS = canvas.height / GRID;
-const TICK_MS = 110;
+const CELLS = 16;
+const TICK_MS = 115;
+const SWIPE_MIN = 28;
+const SWALLOW_MS = 620;
+const SEGMENT_FILL = 0.92;
+const HEAD_SCALE = 1.18;
+
+let GRID, COLS, ROWS;
+let snake, direction, nextDirection, food, score, best, loopId, paused, gameOver, time = 0;
+let swallowAnim = null;
 
 const FRUITS = [
-  { type: "apple", emoji: "🍎", glow: "rgba(255, 80, 80, 0.6)", core: "#ff6b6b" },
-  { type: "banana", emoji: "🍌", glow: "rgba(255, 220, 80, 0.6)", core: "#ffd93d" },
-  { type: "pear", emoji: "🍐", glow: "rgba(160, 255, 120, 0.6)", core: "#a8e063" },
+  { type: "apple", emoji: "🍎", glow: "rgba(255, 80, 80, 0.6)" },
+  { type: "banana", emoji: "🍌", glow: "rgba(255, 220, 80, 0.6)" },
+  { type: "pear", emoji: "🍐", glow: "rgba(160, 255, 120, 0.6)" },
 ];
 
 const DIR = {
@@ -27,9 +36,34 @@ const DIR = {
   s: { x: 0, y: 1 },
   a: { x: -1, y: 0 },
   d: { x: 1, y: 0 },
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
 };
 
-let snake, direction, nextDirection, food, score, best, loopId, paused, gameOver, time = 0;
+function isTouchDevice() {
+  return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+}
+
+function fitCanvas() {
+  const controlsH = isTouchDevice() ? 120 : 0;
+  const uiH = 100;
+  const legendH = 48;
+  const padding = 32;
+  const maxSide = Math.min(
+    window.innerWidth - padding,
+    window.innerHeight - uiH - controlsH - legendH - padding,
+    600
+  );
+  const side = Math.max(CELLS * 14, Math.floor(maxSide / CELLS) * CELLS);
+
+  canvas.width = side;
+  canvas.height = side;
+  GRID = side / CELLS;
+  COLS = CELLS;
+  ROWS = CELLS;
+}
 
 function loadBest() {
   best = parseInt(localStorage.getItem("crystalSnakeBest") || "0", 10);
@@ -72,10 +106,32 @@ function resetGame() {
   scoreEl.textContent = "0";
   paused = false;
   gameOver = false;
+  swallowAnim = null;
+  pauseBtn.classList.remove("paused");
+  pauseBtn.textContent = "⏸";
   spawnFood();
 }
 
-function showOverlay(title, msg, btnText) {
+function startSwallow(fruit) {
+  swallowAnim = {
+    start: performance.now(),
+    emoji: fruit.emoji,
+    fromX: fruit.x,
+    fromY: fruit.y,
+  };
+  food = null;
+}
+
+function swallowProgress() {
+  if (!swallowAnim) return 0;
+  return Math.min(1, (time - swallowAnim.start) / SWALLOW_MS);
+}
+
+function showOverlay(title, msg, btnText, isStart = false) {
+  const nameEl = document.querySelector(".overlay-name");
+  const taglineEl = document.querySelector(".overlay-tagline");
+  if (nameEl) nameEl.style.display = isStart ? "block" : "none";
+  if (taglineEl) taglineEl.style.display = isStart ? "block" : "none";
   overlayTitle.textContent = title;
   overlayMsg.textContent = msg;
   startBtn.textContent = btnText;
@@ -87,23 +143,24 @@ function hideOverlay() {
 }
 
 function startGame() {
+  fitCanvas();
   resetGame();
   hideOverlay();
   if (loopId) clearInterval(loopId);
   loopId = setInterval(tick, TICK_MS);
-  requestAnimationFrame(draw);
 }
 
 function endGame() {
   gameOver = true;
   clearInterval(loopId);
   loopId = null;
+  swallowAnim = null;
   saveBest();
-  showOverlay("游戏结束", `得分 ${score} · 再试一次？`, "重新开始");
+  showOverlay("Game Over", `Score ${score} — hungry again, Coco?`, "Play Again");
 }
 
 function tick() {
-  if (paused || gameOver) return;
+  if (paused || gameOver || swallowAnim) return;
 
   direction = nextDirection;
   const head = snake[0];
@@ -128,10 +185,34 @@ function tick() {
   if (newHead.x === food.x && newHead.y === food.y) {
     score += 10;
     scoreEl.textContent = score;
-    spawnFood();
+    startSwallow(food);
   } else {
     snake.pop();
   }
+}
+
+function applyDirection(d) {
+  if (!d) return;
+  if (d.x === -direction.x && d.y === -direction.y) return;
+  nextDirection = d;
+}
+
+function togglePause() {
+  if (!loopId || gameOver) return;
+  paused = !paused;
+  pauseBtn.classList.toggle("paused", paused);
+  pauseBtn.textContent = paused ? "▶" : "⏸";
+}
+
+function segmentCenter(x, y) {
+  return { cx: x * GRID + GRID / 2, cy: y * GRID + GRID / 2 };
+}
+
+function bodyBulge(index, t) {
+  if (t < 0.35) return 1;
+  const wave = (t - 0.35 - index * 0.09) / 0.45;
+  if (wave < 0 || wave > 1) return 1;
+  return 1 + 0.22 * Math.sin(wave * Math.PI);
 }
 
 function drawCrystalGrid() {
@@ -178,81 +259,245 @@ function drawBoardBg() {
   drawCrystalGrid();
 }
 
-function drawCrystalSegment(x, y, isHead, index) {
-  const px = x * GRID;
-  const py = y * GRID;
-  const pad = 2;
-  const size = GRID - pad * 2;
-  const cx = px + GRID / 2;
-  const cy = py + GRID / 2;
+function roundRect(c, x, y, w, h, r) {
+  const rad = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + rad, y);
+  c.lineTo(x + w - rad, y);
+  c.quadraticCurveTo(x + w, y, x + w, y + rad);
+  c.lineTo(x + w, y + h - rad);
+  c.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  c.lineTo(x + rad, y + h);
+  c.quadraticCurveTo(x, y + h, x, y + h - rad);
+  c.lineTo(x, y + rad);
+  c.quadraticCurveTo(x, y, x + rad, y);
+  c.closePath();
+}
+
+function drawCrystalBody(x, y, index, isHead, swallowT) {
+  const { cx, cy } = segmentCenter(x, y);
+  const bulge = isHead ? 1 : bodyBulge(index, swallowT);
+  const base = GRID * SEGMENT_FILL * bulge;
+  const size = isHead ? base * HEAD_SCALE : base;
+  const px = cx - size / 2;
+  const py = cy - size / 2;
   const hue = 190 + index * 3;
+  const radius = size * 0.38;
 
   ctx.save();
-
   ctx.shadowColor = `hsla(${hue}, 80%, 70%, 0.5)`;
-  ctx.shadowBlur = isHead ? 14 : 8;
+  ctx.shadowBlur = isHead ? GRID * 0.7 : GRID * 0.4;
 
-  const bodyGrad = ctx.createLinearGradient(px, py, px + GRID, py + GRID);
-  bodyGrad.addColorStop(0, `hsla(${hue}, 70%, 75%, 0.55)`);
-  bodyGrad.addColorStop(0.5, `hsla(${hue}, 85%, 85%, 0.35)`);
-  bodyGrad.addColorStop(1, `hsla(${hue + 30}, 60%, 60%, 0.5)`);
+  const bodyGrad = ctx.createLinearGradient(px, py, px + size, py + size);
+  bodyGrad.addColorStop(0, `hsla(${hue}, 70%, 78%, 0.6)`);
+  bodyGrad.addColorStop(0.5, `hsla(${hue}, 85%, 88%, 0.4)`);
+  bodyGrad.addColorStop(1, `hsla(${hue + 30}, 60%, 65%, 0.55)`);
 
-  roundRect(ctx, px + pad, py + pad, size, size, 6);
+  roundRect(ctx, px, py, size, size, radius);
   ctx.fillStyle = bodyGrad;
   ctx.fill();
-
   ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = Math.max(1, GRID * 0.05);
   ctx.stroke();
 
-  const highlight = ctx.createLinearGradient(px, py, px + size * 0.5, py + size * 0.4);
-  highlight.addColorStop(0, "rgba(255, 255, 255, 0.45)");
+  const highlight = ctx.createLinearGradient(px, py, px + size * 0.5, py + size * 0.35);
+  highlight.addColorStop(0, "rgba(255, 255, 255, 0.5)");
   highlight.addColorStop(1, "transparent");
-  roundRect(ctx, px + pad + 2, py + pad + 2, size * 0.45, size * 0.35, 4);
+  roundRect(ctx, px + size * 0.08, py + size * 0.08, size * 0.42, size * 0.32, radius * 0.5);
   ctx.fillStyle = highlight;
   ctx.fill();
 
   if (isHead) {
-    ctx.shadowBlur = 0;
-    const eyeOff = 4;
-    let ex1, ey1, ex2, ey2;
-    if (direction.x === 1) {
-      ex1 = cx + eyeOff; ey1 = cy - 3;
-      ex2 = cx + eyeOff; ey2 = cy + 3;
-    } else if (direction.x === -1) {
-      ex1 = cx - eyeOff; ey1 = cy - 3;
-      ex2 = cx - eyeOff; ey2 = cy + 3;
-    } else if (direction.y === -1) {
-      ex1 = cx - 3; ey1 = cy - eyeOff;
-      ex2 = cx + 3; ey2 = cy - eyeOff;
-    } else {
-      ex1 = cx - 3; ey1 = cy + eyeOff;
-      ex2 = cx + 3; ey2 = cy + eyeOff;
-    }
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.beginPath();
-    ctx.arc(ex1, ey1, 2, 0, Math.PI * 2);
-    ctx.arc(ex2, ey2, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#1a2840";
-    ctx.beginPath();
-    ctx.arc(ex1, ey1, 1, 0, Math.PI * 2);
-    ctx.arc(ex2, ey2, 1, 0, Math.PI * 2);
-    ctx.fill();
+    drawCuteHead(cx, cy, size, swallowT);
   }
 
   ctx.restore();
 }
 
+function mouthVector(size) {
+  const m = size * 0.35;
+  if (direction.x === 1) return { mx: m, my: 0, perpX: 0, perpY: 1 };
+  if (direction.x === -1) return { mx: -m, my: 0, perpX: 0, perpY: 1 };
+  if (direction.y === -1) return { mx: 0, my: -m, perpX: 1, perpY: 0 };
+  return { mx: 0, my: m, perpX: 1, perpY: 0 };
+}
+
+function drawCuteHead(cx, cy, size, swallowT) {
+  ctx.shadowBlur = 0;
+  const eyeR = size * 0.11;
+  const eyeOff = size * 0.22;
+  const { mx, my, perpX, perpY } = mouthVector(size);
+
+  let ex1 = cx + perpX * eyeOff - mx * 0.15;
+  let ey1 = cy + perpY * eyeOff - my * 0.15;
+  let ex2 = cx - perpX * eyeOff - mx * 0.15;
+  let ey2 = cy - perpY * eyeOff - my * 0.15;
+
+  const cheekR = size * 0.12;
+  const c1x = cx + perpX * (eyeOff + size * 0.08);
+  const c1y = cy + perpY * (eyeOff + size * 0.08);
+  const c2x = cx - perpX * (eyeOff + size * 0.08);
+  const c2y = cy - perpY * (eyeOff + size * 0.08);
+
+  ctx.fillStyle = "rgba(255, 140, 160, 0.45)";
+  ctx.beginPath();
+  ctx.arc(c1x, c1y, cheekR, 0, Math.PI * 2);
+  ctx.arc(c2x, c2y, cheekR, 0, Math.PI * 2);
+  ctx.fill();
+
+  const headScale = swallowT < 0.2 ? 1 + swallowT * 0.25 : swallowT < 0.45 ? 1.05 + (swallowT - 0.2) * 0.4 : 1 + Math.max(0, (0.7 - swallowT) * 0.2);
+  const cheekPuff = swallowT > 0.2 && swallowT < 0.55 ? 1 + 0.35 * Math.sin((swallowT - 0.2) * Math.PI / 0.35) : 1;
+
+  if (cheekPuff > 1) {
+    ctx.fillStyle = "rgba(255, 120, 150, 0.35)";
+    ctx.beginPath();
+    ctx.arc(c1x, c1y, cheekR * cheekPuff, 0, Math.PI * 2);
+    ctx.arc(c2x, c2y, cheekR * cheekPuff, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const happy = swallowT >= 0.5;
+  const munching = swallowT > 0 && swallowT < 0.5;
+
+  if (happy) {
+    ctx.strokeStyle = "#1a2840";
+    ctx.lineWidth = Math.max(1.5, size * 0.04);
+    ctx.lineCap = "round";
+    const arcR = eyeR * 0.9;
+    [[ex1, ey1, -1], [ex2, ey2, 1]].forEach(([ex, ey, flip]) => {
+      ctx.beginPath();
+      ctx.arc(ex - perpX * arcR * 0.3 * flip, ey - perpY * arcR * 0.3 * flip, arcR, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.stroke();
+    });
+  } else if (munching) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.beginPath();
+    ctx.ellipse(ex1, ey1, eyeR * 1.1, eyeR * 0.35, 0, 0, Math.PI * 2);
+    ctx.ellipse(ex2, ey2, eyeR * 1.1, eyeR * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1a2840";
+    ctx.beginPath();
+    ctx.arc(ex1, ey1 + eyeR * 0.15, eyeR * 0.35, 0, Math.PI * 2);
+    ctx.arc(ex2, ey2 + eyeR * 0.15, eyeR * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.beginPath();
+    ctx.arc(ex1, ey1, eyeR, 0, Math.PI * 2);
+    ctx.arc(ex2, ey2, eyeR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1a2840";
+    ctx.beginPath();
+    ctx.arc(ex1 + perpX * eyeR * 0.2, ey1 + perpY * eyeR * 0.2, eyeR * 0.45, 0, Math.PI * 2);
+    ctx.arc(ex2 + perpX * eyeR * 0.2, ey2 + perpY * eyeR * 0.2, eyeR * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.beginPath();
+    ctx.arc(ex1 - perpX * eyeR * 0.25, ey1 - perpY * eyeR * 0.25, eyeR * 0.2, 0, Math.PI * 2);
+    ctx.arc(ex2 - perpX * eyeR * 0.25, ey2 - perpY * eyeR * 0.25, eyeR * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const mouthX = cx + mx;
+  const mouthY = cy + my;
+  const openAmount = swallowT < 0.15 ? swallowT / 0.15 : swallowT < 0.4 ? 1 : swallowT < 0.55 ? 1 - (swallowT - 0.4) / 0.15 : 0;
+  const mouthW = size * 0.22 * (0.3 + openAmount * 0.9);
+  const mouthH = size * 0.14 * (0.4 + openAmount * 1.1);
+
+  ctx.fillStyle = "#2a1838";
+  ctx.beginPath();
+  ctx.ellipse(mouthX, mouthY, mouthW, mouthH, Math.atan2(my, mx || 0.001), 0, Math.PI * 2);
+  ctx.fill();
+
+  if (openAmount > 0.3) {
+    ctx.fillStyle = "#ff8aa0";
+    ctx.beginPath();
+    ctx.ellipse(mouthX, mouthY, mouthW * 0.75, mouthH * 0.55, Math.atan2(my, mx || 0.001), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (swallowT >= 0.4 && swallowT < 0.75) {
+    const lump = (swallowT - 0.4) / 0.35;
+    const lumpX = cx - mx * 0.35 * (1 - lump);
+    const lumpY = cy - my * 0.35 * (1 - lump);
+    ctx.fillStyle = "rgba(255, 200, 180, 0.5)";
+    ctx.beginPath();
+    ctx.arc(lumpX, lumpY, size * 0.12 * Math.sin(lump * Math.PI), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (swallowT >= 0.55 && swallowT < 0.85) {
+    ctx.font = `${size * 0.35}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("✨", cx - perpX * size * 0.55, cy - perpY * size * 0.55 - size * 0.2);
+    ctx.fillText("💕", cx + perpX * size * 0.5, cy + perpY * size * 0.5 - size * 0.25);
+  }
+}
+
+function drawSwallowFruit(swallowT) {
+  if (!swallowAnim || swallowT <= 0 || swallowT >= 0.55) return;
+
+  const head = snake[0];
+  const { cx, cy } = segmentCenter(head.x, head.y);
+  const size = GRID * SEGMENT_FILL * HEAD_SCALE;
+  const { mx, my } = mouthVector(size);
+  const mouthX = cx + mx;
+  const mouthY = cy + my;
+
+  let fx, fy, fScale, fAlpha;
+  if (swallowT < 0.2) {
+    const p = swallowT / 0.2;
+    const start = segmentCenter(swallowAnim.fromX, swallowAnim.fromY);
+    fx = start.cx + (mouthX - start.cx) * p;
+    fy = start.cy + (mouthY - start.cy) * p;
+    fScale = GRID * 0.75 * (1 - p * 0.15);
+    fAlpha = 1;
+  } else {
+    const p = (swallowT - 0.2) / 0.35;
+    fx = mouthX;
+    fy = mouthY;
+    fScale = GRID * 0.65 * (1 - p * 0.85);
+    fAlpha = 1 - p * 0.9;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = fAlpha;
+  ctx.font = `${fScale}px serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(swallowAnim.emoji, fx, fy);
+  ctx.restore();
+}
+
+function drawGulpHearts(swallowT) {
+  if (!swallowAnim || swallowT < 0.45 || swallowT > 0.9) return;
+
+  const head = snake[0];
+  const { cx, cy } = segmentCenter(head.x, head.y);
+  const p = (swallowT - 0.45) / 0.45;
+  const float = p * GRID * 1.2;
+
+  ctx.save();
+  ctx.globalAlpha = 1 - p;
+  ctx.font = `${GRID * 0.45}px serif`;
+  ctx.textAlign = "center";
+  ["♥", "★", "♥"].forEach((ch, i) => {
+    const angle = (i - 1) * 0.8 + time * 0.005;
+    ctx.fillText(ch, cx + Math.sin(angle) * GRID * 0.5, cy - float - i * 8);
+  });
+  ctx.restore();
+}
+
 function drawFood() {
+  if (!food || swallowAnim) return;
   const cx = food.x * GRID + GRID / 2;
   const cy = food.y * GRID + GRID / 2;
   const pulse = 1 + 0.08 * Math.sin(time * 0.008);
 
   ctx.save();
-
   ctx.shadowColor = food.glow;
-  ctx.shadowBlur = 20 + 6 * Math.sin(time * 0.01);
+  ctx.shadowBlur = GRID * (0.8 + 0.3 * Math.sin(time * 0.01));
 
   const ring = ctx.createRadialGradient(cx, cy, 0, cx, cy, GRID * 0.7 * pulse);
   ring.addColorStop(0, food.glow);
@@ -263,49 +508,53 @@ function drawFood() {
   ctx.arc(cx, cy, GRID * 0.75 * pulse, 0, Math.PI * 2);
   ctx.fill();
 
-  roundRect(ctx, cx - GRID * 0.38, cy - GRID * 0.38, GRID * 0.76, GRID * 0.76, 8);
+  roundRect(ctx, cx - GRID * 0.38, cy - GRID * 0.38, GRID * 0.76, GRID * 0.76, GRID * 0.35);
   const gem = ctx.createLinearGradient(cx - 10, cy - 10, cx + 10, cy + 10);
   gem.addColorStop(0, "rgba(255,255,255,0.35)");
   gem.addColorStop(0.5, "rgba(255,255,255,0.12)");
   gem.addColorStop(1, "rgba(255,255,255,0.25)");
   ctx.fillStyle = gem;
   ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.5)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
 
-  ctx.font = `${GRID * 0.85}px serif`;
+  ctx.font = `${GRID * 0.88}px serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(food.emoji, cx, cy + 1);
-
   ctx.restore();
 }
 
-function roundRect(c, x, y, w, h, r) {
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.lineTo(x + w - r, y);
-  c.quadraticCurveTo(x + w, y, x + w, y + r);
-  c.lineTo(x + w, y + h - r);
-  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  c.lineTo(x + r, y + h);
-  c.quadraticCurveTo(x, y + h, x, y + h - r);
-  c.lineTo(x, y + r);
-  c.quadraticCurveTo(x, y, x + r, y);
-  c.closePath();
+function drawSnake(swallowT) {
+  snake.forEach((seg, i) => {
+    drawCrystalBody(seg.x, seg.y, i, i === 0, swallowT);
+  });
 }
 
 function draw() {
   time = performance.now();
+
+  if (swallowAnim && swallowProgress() >= 1) {
+    swallowAnim = null;
+    spawnFood();
+  }
+
+  const st = swallowProgress();
+
+  if (!snake) {
+    drawBoardBg();
+    requestAnimationFrame(draw);
+    return;
+  }
+
   drawBoardBg();
-  snake.forEach((seg, i) => drawCrystalSegment(seg.x, seg.y, i === 0, i));
+  drawSnake(st);
   drawFood();
+  drawSwallowFruit(st);
+  drawGulpHearts(st);
 
   if (paused && !gameOver) {
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.font = "500 28px Noto Sans SC, sans-serif";
+    ctx.font = `500 ${Math.max(20, GRID * 1.2)}px Noto Sans SC, sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.textAlign = "center";
     ctx.fillText("暂停", canvas.width / 2, canvas.height / 2);
@@ -314,26 +563,75 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
-function setDirection(key) {
-  const d = DIR[key];
-  if (!d) return;
-  if (d.x === -direction.x && d.y === -direction.y) return;
-  nextDirection = d;
+let touchStartX = 0;
+let touchStartY = 0;
+
+function onTouchStart(e) {
+  if (!loopId || gameOver) return;
+  const t = e.changedTouches[0];
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
 }
+
+function onTouchEnd(e) {
+  if (!loopId || gameOver) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+
+  if (Math.max(ax, ay) < SWIPE_MIN) return;
+
+  if (ax > ay) {
+    applyDirection(dx > 0 ? DIR.right : DIR.left);
+  } else {
+    applyDirection(dy > 0 ? DIR.down : DIR.up);
+  }
+}
+
+gameWrap.addEventListener("touchstart", onTouchStart, { passive: true });
+gameWrap.addEventListener("touchend", onTouchEnd, { passive: true });
+
+document.addEventListener("touchmove", (e) => {
+  if (loopId && !gameOver) e.preventDefault();
+}, { passive: false });
+
+mobileControls.querySelectorAll("[data-dir]").forEach((btn) => {
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (!loopId || gameOver) return;
+    applyDirection(DIR[btn.dataset.dir]);
+  });
+});
+
+pauseBtn.addEventListener("click", togglePause);
 
 document.addEventListener("keydown", (e) => {
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
     e.preventDefault();
   }
   if (e.key === " " && loopId && !gameOver) {
-    paused = !paused;
+    togglePause();
     return;
   }
   if (gameOver || !loopId) return;
-  setDirection(e.key);
+  applyDirection(DIR[e.key]);
+});
+
+window.addEventListener("resize", () => {
+  if (!loopId) fitCanvas();
 });
 
 startBtn.addEventListener("click", startGame);
 loadBest();
-showOverlay("准备开始", "吃掉随机出现的 🍎 🍌 🍐，让水晶蛇不断生长", "开始游戏");
+fitCanvas();
+showOverlay(
+  "Coco's Hungry Snake",
+  isTouchDevice()
+    ? "Swipe or use the pad below · fruits change every bite 🍎🍌🍐"
+    : "Feed me 🍎 🍌 🍐 — the fruits change every bite!",
+  "Let's Eat",
+  true
+);
 requestAnimationFrame(draw);
